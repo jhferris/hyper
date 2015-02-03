@@ -20,7 +20,7 @@ use mucell::MuCell;
 use uany::{UnsafeAnyExt};
 use unicase::UniCase;
 
-use {http, HttpResult};
+use {http, HttpResult, HttpError};
 
 pub use self::shared::{Encoding, QualityItem, qitem};
 pub use self::common::*;
@@ -118,6 +118,8 @@ pub struct Headers {
     data: HashMap<HeaderName, MuCell<Item>>
 }
 
+const MAX_HEADERS_COUNT: u8 = 100;
+
 impl Headers {
 
     /// Creates a new, empty headers map.
@@ -130,6 +132,7 @@ impl Headers {
     #[doc(hidden)]
     pub fn from_raw<R: Reader>(rdr: &mut R) -> HttpResult<Headers> {
         let mut headers = Headers::new();
+        let mut count = 0u8;
         loop {
             match try!(http::read_header(rdr)) {
                 Some((name, value)) => {
@@ -145,6 +148,11 @@ impl Headers {
                         // Unreachable
                         _ => {}
                     };
+                    count += 1;
+                    if count > MAX_HEADERS_COUNT {
+                        debug!("Too many headers, aborting");
+                        return Err(HttpError::HttpHeaderError)
+                    }
                 },
                 None => break,
             }
